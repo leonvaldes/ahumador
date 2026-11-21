@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#15110e">
+<title>Ahumador</title>
+<style>
+:root{
+  --bg:#15110e; --card:#201a15; --card2:#2a221b; --line:#3a2f26; --txt:#f3ebe2; --mut:#a8998a;
+  --fire:#ff7a1a; --fire2:#ffb347; --ok:#5fd08a; --bad:#ff5a4d; --warn:#ffd24a;
+  --p0:#4da3ff; --p1:#5fd08a; --p2:#e9e4dc; --p3:#ffd24a;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{padding:12px 16px calc(24px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto}
+button{font:inherit;color:inherit;border:0;border-radius:12px;background:var(--card2);padding:10px 14px;cursor:pointer;touch-action:manipulation}
+button:active{filter:brightness(1.25)}
+button:disabled{opacity:.4}
+header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+header h1{font-size:19px;margin:0;flex:1;letter-spacing:.3px}
+#dot{width:10px;height:10px;border-radius:50%;background:#665;flex:none}
+#dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+#dot.wait{background:var(--warn);animation:bl 1s infinite}
+@keyframes bl{50%{opacity:.3}}
+#btnConn{background:var(--fire);color:#1a0d00;font-weight:650}
+#btnConn.on{background:var(--card2);color:var(--txt);font-weight:400}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px}
+#banner{display:none;border-radius:14px;padding:12px 14px;margin-bottom:12px;font-weight:600;align-items:center;gap:10px}
+#banner.fault{display:flex;background:#4a1512;border:1px solid var(--bad);color:#ffd9d5}
+#banner.info{display:flex;background:#3d3210;border:1px solid var(--warn);color:#fff1c2}
+#banner span{flex:1}
+#banner button{background:rgba(255,255,255,.14);padding:8px 12px}
+.hero{display:flex;align-items:flex-end;gap:8px}
+#amb{font-size:76px;font-weight:700;line-height:.95;font-variant-numeric:tabular-nums;letter-spacing:-2px}
+#amb small{font-size:30px;font-weight:500;color:var(--mut);letter-spacing:0}
+.pill{margin-left:auto;align-self:flex-start;padding:5px 12px;border-radius:99px;background:var(--card2);font-size:13px;font-weight:650;white-space:nowrap}
+.pill.run{background:#3a2208;color:var(--fire2)} .pill.bad{background:#4a1512;color:#ffb1aa} .pill.tune{background:#1d2c45;color:#9cc8ff}
+.meta{display:flex;gap:14px;color:var(--mut);font-size:14px;margin:10px 0 6px}
+.bar{height:8px;background:var(--card2);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--fire),var(--fire2));border-radius:99px;transition:width .6s}
+.sp{display:flex;align-items:center;gap:6px;margin-top:16px}
+.sp button{flex:1;padding:12px 0;font-size:17px;font-variant-numeric:tabular-nums}
+.sp .val{flex:1.5;text-align:center}
+.sp .val b{display:block;font-size:30px;line-height:1.1;font-variant-numeric:tabular-nums}
+.sp .val span{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:1px}
+.sp .val.pend b{color:var(--fire2)}
+#btnRun{width:100%;margin-top:14px;padding:16px;font-size:18px;font-weight:700;background:var(--fire);color:#1a0d00}
+#btnRun.stop{background:#4a1512;color:#ffd9d5;border:1px solid var(--bad)}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mut);margin:0 0 10px;font-weight:650;display:flex;align-items:center}
+h2 .seg{margin-left:auto;display:flex;gap:4px}
+h2 .seg button{padding:4px 10px;font-size:12px;border-radius:8px;text-transform:none;letter-spacing:0;color:var(--mut)}
+h2 .seg button.sel{background:var(--fire);color:#1a0d00;font-weight:650}
+canvas{width:100%;height:190px;display:block}
+.probes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.probe{background:var(--card2);border-radius:14px;padding:12px;border:1px solid transparent;min-width:0}
+.probe.hit{border-color:var(--ok)}
+.probe .nm{font-size:13px;color:var(--mut);display:flex;align-items:center;gap:6px}
+.probe .nm i{width:10px;height:10px;border-radius:50%;flex:none}
+.probe .t{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.15}
+.probe .t.off{color:#6d6257;font-weight:500}
+.probe .tg{width:100%;margin-top:6px;padding:8px;font-size:14px;background:rgba(255,255,255,.06);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.probe .eta{font-size:12px;color:var(--mut);min-height:17px;margin-top:4px}
+.probe .bar{height:5px;margin-top:8px}.probe .bar i{background:var(--ok)}
+details summary{cursor:pointer;color:var(--mut);font-size:13px;text-transform:uppercase;letter-spacing:1.2px;font-weight:650;list-style:none}
+details summary::after{content:" +"} details[open] summary::after{content:" −"}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.row label{font-size:14px;color:var(--mut);flex:1;min-width:0}
+input{font:inherit;color:var(--txt);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 10px;min-width:0}
+#log{font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;background:#0d0a08;border-radius:10px;padding:10px;height:150px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin-top:12px;color:#cfc3b6}
+#log .tx{color:var(--fire2)} #log .er{color:var(--bad)}
+dialog{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:18px;padding:18px;width:min(92vw,400px)}
+dialog::backdrop{background:rgba(0,0,0,.65)}
+dialog h3{margin:0 0 4px} dialog p{margin:0 0 12px;color:var(--mut);font-size:14px}
+#dlgVal{font-size:44px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;padding:0;accent-color:var(--fire);height:36px;border:0;background:none}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 16px}
+.chips button{font-size:13px;padding:7px 11px}
+.acts{display:flex;gap:8px}.acts button{flex:1;padding:13px}.acts .go{background:var(--fire);color:#1a0d00;font-weight:700}
+#hint{color:var(--mut);font-size:14px;text-align:center;padding:6px 8px 14px}
+#hint a{color:var(--fire2)}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#000c;border:1px solid var(--line);padding:9px 16px;border-radius:99px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:90vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <i id="dot"></i><h1>Ahumador</h1>
+  <button id="btnConn">Conectar</button>
+</header>
+
+<div id="banner"><span id="banTxt"></span><button id="banBtn"></button></div>
+<div id="hint"></div>
+
+<section class="card">
+  <div class="hero">
+    <div id="amb">--.-<small>°C</small></div>
+    <div class="pill" id="state">sin conexión</div>
+  </div>
+  <div class="meta"><span>Potencia <b id="pw">0</b> %</span><span id="run"></span></div>
+  <div class="bar"><i id="pwBar"></i></div>
+  <div class="sp">
+    <button data-d="-5">−5</button><button data-d="-1">−1</button>
+    <div class="val" id="spBox"><span>Objetivo</span><b id="sp">---</b></div>
+    <button data-d="1">+1</button><button data-d="5">+5</button>
+  </div>
+  <button id="btnRun" disabled>Encender</button>
+</section>
+
+<section class="card">
+  <h2>Sondas de carne</h2>
+  <div class="probes" id="probes"></div>
+</section>
+
+<section class="card">
+  <h2>Historial <span class="seg" id="seg"><button data-m="30">30 min</button><button data-m="120" class="sel">2 h</button><button data-m="0">Todo</button></span></h2>
+  <canvas id="chart"></canvas>
+</section>
+
+<section class="card">
+  <details>
+    <summary>Avanzado</summary>
+    <div class="row"><label>PID: <span id="pidTxt">—</span></label><button id="btnTune">Autotune</button></div>
+    <div class="row"><label>Avisos sonoros del controlador</label><button id="btnBuz1">Sí</button><button id="btnBuz0">No</button></div>
+    <div class="row"><label>Tensión del riel de 3,3 V</label><input id="vref" type="number" step="0.01" min="3" max="3.6" placeholder="3.30" style="width:90px"><button id="btnVref">Enviar</button></div>
+    <div class="row"><input id="cmd" placeholder="Orden manual (? = ayuda)" style="flex:1" autocapitalize="characters" autocomplete="off"><button id="btnCmd">Enviar</button></div>
+    <div id="log"></div>
+    <div class="row"><button id="btnDemo">Modo demostración</button><button id="btnClear">Borrar historial</button></div>
+  </details>
+</section>
+
+<dialog id="dlg">
+  <h3 id="dlgT"></h3><p>Temperatura interna a la que debe avisar.</p>
+  <div id="dlgVal">--</div>
+  <input type="range" id="dlgR" min="40" max="120" step="1">
+  <div class="chips" id="chips"></div>
+  <div class="acts"><button id="dlgOff">Sin aviso</button><button class="go" id="dlgOk">Guardar</button></div>
+</dialog>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e", RXU = "6e400002-b5a3-f393-e0a9-e50e24dcca9e", TXU = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+const NAMES = ["Azul", "Verde", "Blanco", "Amarillo"], COLORS = ["--p0", "--p1", "--p2", "--p3"];
+const PRESETS = [["Pollo", 74], ["Costillar", 90], ["Pulled pork", 93], ["Brisket", 95], ["Vacuno a punto", 57]];
+const SP_MIN = 40, SP_MAX = 180;
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+let link = null;            // transporte activo: {send(text), close()}
+let st = null;              // ultimo estado recibido
+let pendSp = null, pendSpAt = 0, spTimer = 0;
+let hist = [];              // {x: ms, t, sp, m:[4]}
+let rangeMin = 120, lastAlarm = {}, wake = null;
+
+// ---------------------------------------------------------------- utilidades
+function toast(s) { const t = $("toast"); t.textContent = s; t.classList.add("show"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 2600); }
+function log(s, cls) {
+  const l = $("log"), d = document.createElement("div"); if (cls) d.className = cls; d.textContent = s; l.appendChild(d);
+  while (l.childNodes.length > 120) l.removeChild(l.firstChild);
+  l.scrollTop = l.scrollHeight;
+}
+function beep(n) {
+  try {
+    beep.c = beep.c || new (window.AudioContext || window.webkitAudioContext)();
+    for (let i = 0; i < n; i++) {
+      const o = beep.c.createOscillator(), g = beep.c.createGain(), t0 = beep.c.currentTime + i * 0.3;
+      o.frequency.value = 1760; o.connect(g); g.connect(beep.c.destination);
+      g.gain.setValueAtTime(0.25, t0); g.gain.setValueAtTime(0, t0 + 0.18); o.start(t0); o.stop(t0 + 0.2);
+    }
+  } catch (e) {}
+  if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 250]);
+}
+function hms(s) { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? h + " h " + String(m).padStart(2, "0") + " min" : m + " min"; }
+
+// ---------------------------------------------------------------- Bluetooth
+class BleLink {
+  constructor() { this.buf = ""; this.q = Promise.resolve(); this.closed = false; }
+  async open() {
+    this.dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [NUS] }, { namePrefix: "Ahumador" }], optionalServices: [NUS] });
+    this.dev.addEventListener("gattserverdisconnected", () => this.lost());
+    await this.attach();
+  }
+  async attach() {
+    const srv = await this.dev.gatt.connect(), svc = await srv.getPrimaryService(NUS);
+    this.rx = await svc.getCharacteristic(RXU);
+    const tx = await svc.getCharacteristic(TXU);
+    tx.addEventListener("characteristicvaluechanged", e => this.data(new TextDecoder().decode(e.target.value)));
+    await tx.startNotifications();
+    this.buf = ""; this.q = Promise.resolve();
+  }
+  data(s) {
+    this.buf += s;
+    let i;
+    while ((i = this.buf.indexOf("\n")) >= 0) { const l = this.buf.slice(0, i).trim(); this.buf = this.buf.slice(i + 1); if (l) onLine(l); }
+    if (this.buf.length > 600) this.buf = "";
+  }
+  send(text) {
+    const b = new TextEncoder().encode(text + "\n");
+    this.q = this.q.then(async () => { for (let i = 0; i < b.length; i += 20) await this.rx.writeValue(b.slice(i, i + 20)); })
+      .catch(e => log("! " + e.message, "er"));
+  }
+  async lost() {
+    if (this.closed) return;
+    setConn("wait"); log("Conexión perdida, reintentando…", "er");
+    for (let n = 0; n < 8 && !this.closed; n++) {
+      await new Promise(r => setTimeout(r, 1500 + n * 1000));
+      try { await this.attach(); setConn("on"); log("Reconectado"); this.send("GET"); return; } catch (e) {}
+    }
+    if (!this.closed) { link = null; setConn("off"); toast("Se perdió la conexión"); }
+  }
+  close() { this.closed = true; try { this.dev.gatt.disconnect(); } catch (e) {} }
+}
+
+// Simulador para probar la pantalla sin el ahumador
+class DemoLink {
+  constructor() {
+    this.s = { st: "ESPERA", f: "", msg: "", t: 22, sp: 110, pw: 0, m: [18.5, null, null, 12.0], tg: [93, 0, 0, 74], run: 0 };
+    this.i = 0; this.h = setInterval(() => this.tick(), 2000); setTimeout(() => this.tick(), 50);
+  }
+  tick() {
+    const s = this.s, k = 30;                       // k = aceleracion del tiempo
+    if (s.st === "RUN") {
+      const e = s.sp - s.t; this.i = Math.max(0, Math.min(60, this.i + e * 0.02));
+      s.pw = Math.round(Math.max(0, Math.min(100, e * 12 + this.i))); s.run += 2 * k;
+    } else s.pw = 0;
+    s.t += (s.pw * 0.012 - (s.t - 20) * 0.0042) * k / 15 + (Math.random() - .5) * .1;
+    s.m = s.m.map(v => v == null ? null : v + (s.t - v) * 0.0006 * k);
+    onLine(JSON.stringify(Object.assign({}, s, { t: +s.t.toFixed(1), m: s.m.map(v => v == null ? null : +v.toFixed(1)) })));
+  }
+  send(text) {
+    const p = text.trim().toUpperCase().split(/\s+/), s = this.s; let r = "OK";
+    if (p[0] === "SET") { s.sp = Math.max(SP_MIN, Math.min(SP_MAX, Math.round(+p[1]))); r = "OK SP " + s.sp; }
+    else if (p[0] === "START") s.st = "RUN"; else if (p[0] === "STOP") s.st = "ESPERA";
+    else if (p[0] === "TGT") { s.tg[p[1] - 1] = Math.round(+p[2]); r = "OK TGT " + p[1] + " " + s.tg[p[1] - 1]; }
+    else if (p[0] === "PID") r = "OK PID 5.00 300 40"; else if (p[0] === "GET") { this.tick(); return; }
+    else if (p[0] === "TUNE") r = "ERR no disponible en demostración";
+    setTimeout(() => onLine(r), 80);
+  }
+  close() { clearInterval(this.h); }
+}
+
+function send(cmd) { if (!link) { toast("Sin conexión"); return false; } log("> " + cmd, "tx"); link.send(cmd); return true; }
+
+function setConn(mode) {
+  $("dot").className = mode === "on" ? "on" : mode === "wait" ? "wait" : "";
+  const on = mode !== "off";
+  $("btnConn").textContent = on ? "Desconectar" : "Conectar"; $("btnConn").classList.toggle("on", on);
+  if (!on) { st = null; render(); }
+  if (mode === "on" && "wakeLock" in navigator && !wake) navigator.wakeLock.request("screen").then(w => { wake = w; w.addEventListener("release", () => wake = null); }).catch(() => {});
+  if (!on && wake) { wake.release(); wake = null; }
+}
+
+async function connect() {
+  if (link) { link.close(); link = null; setConn("off"); return; }
+  if (!navigator.bluetooth) { toast("Este navegador no tiene Web Bluetooth"); return; }
+  const l = new BleLink();
+  try { setConn("wait"); await l.open(); link = l; setConn("on"); log("Conectado a " + (l.dev.name || "ahumador")); send("GET"); send("PID"); }
+  catch (e) { setConn("off"); if (e.name !== "NotFoundError") { log("! " + e.message, "er"); toast("No se pudo conectar"); } }
+}
+
+// ---------------------------------------------------------------- datos entrantes
+function onLine(l) {
+  if (l[0] === "{") {
+    let d; try { d = JSON.parse(l); } catch (e) { return; }
+    st = d; record(d); alarms(d); render(); return;
+  }
+  log(l, l.startsWith("ERR") ? "er" : "");
+  const m = l.match(/^OK PID ([\d.]+) ([\d.]+) ([\d.]+)/);
+  if (m) $("pidTxt").textContent = "Kp " + m[1] + " · Ti " + m[2] + " s · Td " + m[3] + " s";
+  if (l.startsWith("ERR")) toast(l.slice(4));
+}
+
+function record(d) {
+  const now = Date.now(), last = hist[hist.length - 1];
+  if (last && now - last.x < 1500) return;
+  hist.push({ x: now, t: d.t, sp: d.st === "ESPERA" ? null : d.sp, m: d.m.slice() });
+  if (hist.length > 6000) hist = hist.filter((_, i) => i % 2 === 0 || i > hist.length - 600);
+  if (!record.saved || now - record.saved > 30000) { record.saved = now; try { localStorage.setItem("ahumador.hist", JSON.stringify(hist.slice(-3000))); } catch (e) {} }
+}
+
+function alarms(d) {
+  d.m.forEach((t, i) => {
+    const hit = t != null && d.tg[i] > 0 && t >= d.tg[i];
+    if (hit && !lastAlarm["p" + i]) { beep(3); toast("Sonda " + NAMES[i] + " llegó a " + d.tg[i] + " °C"); }
+    lastAlarm["p" + i] = hit;
+  });
+  if (d.st === "FALLA" && !lastAlarm.f) beep(5);
+  lastAlarm.f = d.st === "FALLA";
+  if (d.msg === "AT OK" && !lastAlarm.at) { toast("Autotune terminado"); send("PID"); }
+  lastAlarm.at = d.msg === "AT OK";
+}
+
+function eta(i) {
+  const tg = st.tg[i], now = Date.now(), pts = hist.filter(p => now - p.x < 15 * 60000 && p.m[i] != null);
+  if (!tg || pts.length < 20 || now - pts[0].x < 4 * 60000) return "";
+  const n = pts.length, mx = pts.reduce((a, p) => a + p.x, 0) / n, my = pts.reduce((a, p) => a + p.m[i], 0) / n;
+  let sxy = 0, sxx = 0; pts.forEach(p => { sxy += (p.x - mx) * (p.m[i] - my); sxx += (p.x - mx) ** 2; });
+  const slope = sxy / sxx * 1000, cur = pts[n - 1].m[i];               // C por segundo
+  if (cur >= tg) return ""; if (slope < 1 / 3600) return "sin estimación aún";
+  const s = (tg - cur) / slope; return s > 20 * 3600 ? "sin estimación aún" : "faltan aprox. " + hms(s);
+}
+
+// ---------------------------------------------------------------- pantalla
+function render() {
+  const on = !!st, d = st || {};
+  $("amb").firstChild.textContent = on && d.t != null ? d.t.toFixed(1) : "--.-";
+  const pill = $("state");
+  let txt = "sin conexión", cls = "pill";
+  if (on) {
+    if (d.st === "RUN") { txt = d.msg === "TEMP ALTA" ? "Temperatura alta" : (d.t != null && d.t < d.sp - 3 ? "Calentando" : "Regulando"); cls += " run"; }
+    else if (d.st === "TUNE") { txt = "Autotune"; cls += " tune"; }
+    else if (d.st === "FALLA") { txt = "Falla"; cls += " bad"; }
+    else txt = "En espera";
+  }
+  pill.textContent = txt; pill.className = cls;
+  $("pw").textContent = on ? d.pw : 0; $("pwBar").style.width = (on ? d.pw : 0) + "%";
+  $("run").textContent = on && d.st !== "ESPERA" && d.run ? "Encendido hace " + hms(d.run) : "";
+  const showPend = pendSp != null && Date.now() - pendSpAt < 4000;
+  if (!showPend) pendSp = null;
+  $("sp").textContent = on ? (showPend ? pendSp : d.sp) + "°" : "---"; $("spBox").classList.toggle("pend", showPend && on);
+  const b = $("btnRun"), active = d.st === "RUN" || d.st === "TUNE";
+  b.disabled = !on || d.st === "FALLA"; b.textContent = active ? "Apagar" : "Encender"; b.classList.toggle("stop", active);
+  $("btnTune").textContent = d.st === "TUNE" ? "Cancelar autotune" : "Autotune";
+  const ban = $("banner");
+  if (on && d.st === "FALLA") { ban.className = "fault"; $("banTxt").textContent = "Falla: " + d.f + ". La resistencia está apagada."; $("banBtn").textContent = "Borrar"; $("banBtn").style.display = ""; }
+  else if (on && d.msg && d.msg !== "AT OK") { ban.className = "info"; $("banTxt").textContent = d.msg; $("banBtn").style.display = "none"; }
+  else ban.className = "";
+  for (let i = 0; i < 4; i++) {
+    const t = on ? d.m[i] : null, tg = on ? d.tg[i] : 0, el = $("pr" + i);
+    const tv = el.querySelector(".t"); tv.textContent = t == null ? "sin sonda" : t.toFixed(1) + "°"; tv.classList.toggle("off", t == null);
+    tv.style.fontSize = t == null ? "20px" : ""; tv.style.lineHeight = t == null ? "39px" : "";
+    el.querySelector(".tg").textContent = tg > 0 ? "Aviso a " + tg + " °C" : "Fijar aviso";
+    el.querySelector(".tg").disabled = !on;
+    const hit = t != null && tg > 0 && t >= tg; el.classList.toggle("hit", hit);
+    el.querySelector(".eta").textContent = hit ? "¡Lista!" : (t != null && tg > 0 ? eta(i) : "");
+    el.querySelector(".bar i").style.width = (t != null && tg > 0 ? Math.max(0, Math.min(100, (t - 5) / (tg - 5) * 100)) : 0) + "%";
+  }
+  draw();
+}
+
+function draw() {
+  const cv = $("chart"), r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  if (!r.width) return;
+  if (cv.width !== Math.round(r.width * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); }
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, r.width, r.height);
+  const W = r.width, H = r.height, L = 34, R = 6, T = 8, B = 20, now = Date.now();
+  const x0 = rangeMin ? now - rangeMin * 60000 : (hist.length ? hist[0].x : now - 60000);
+  const pts = hist.filter(p => p.x >= x0);
+  g.font = "11px system-ui"; g.fillStyle = css("--mut");
+  if (pts.length < 2) { g.textAlign = "center"; g.fillText("Aún no hay datos", W / 2, H / 2); return; }
+  let lo = 1e9, hi = -1e9;
+  pts.forEach(p => [p.t, p.sp].concat(p.m).forEach(v => { if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }));
+  lo = Math.floor((lo - 5) / 10) * 10; hi = Math.ceil((hi + 5) / 10) * 10;
+  const X = x => L + (x - x0) / Math.max(1, now - x0) * (W - L - R), Y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const stepY = (hi - lo) > 120 ? 40 : (hi - lo) > 60 ? 20 : 10;
+  g.strokeStyle = css("--line"); g.lineWidth = 1; g.textAlign = "right"; g.textBaseline = "middle";
+  for (let v = lo; v <= hi; v += stepY) { g.beginPath(); g.moveTo(L, Y(v) + .5); g.lineTo(W - R, Y(v) + .5); g.stroke(); g.fillText(v, L - 6, Y(v)); }
+  g.textAlign = "center"; g.textBaseline = "alphabetic";
+  const span = (now - x0) / 60000, stepX = span > 480 ? 120 : span > 180 ? 60 : span > 60 ? 30 : span > 20 ? 10 : 5;
+  for (let m = stepX; m < span; m += stepX) g.fillText("−" + (m >= 60 ? (m / 60) + " h" : m + " min"), X(now - m * 60000), H - 5);
+  const line = (get, color, w, dash) => {
+    g.beginPath(); g.strokeStyle = color; g.lineWidth = w; g.setLineDash(dash || []); let pen = false, px = 0;
+    pts.forEach(p => { const v = get(p); if (v == null || (pen && p.x - px > 60000)) { pen = false; if (v == null) return; } g[pen ? "lineTo" : "moveTo"](X(p.x), Y(v)); pen = true; px = p.x; });
+    g.stroke(); g.setLineDash([]);
+  };
+  line(p => p.sp, css("--mut"), 1, [4, 4]);
+  for (let i = 0; i < 4; i++) line(p => p.m[i], css(COLORS[i]), 1.5);
+  line(p => p.t, css("--fire"), 2.2);
+}
+
+// ---------------------------------------------------------------- acciones
+$("probes").innerHTML = NAMES.map((n, i) => `<div class="probe" id="pr${i}"><div class="nm"><i style="background:var(${COLORS[i]})"></i>${i + 1} · ${n}</div><div class="t off">sin sonda</div><div class="bar"><i></i></div><div class="eta"></div><button class="tg" data-i="${i}" disabled>Fijar aviso</button></div>`).join("");
+$("chips").innerHTML = PRESETS.map(p => `<button data-v="${p[1]}">${p[0]} ${p[1]}°</button>`).join("");
+
+$("btnConn").onclick = connect;
+document.querySelectorAll(".sp button").forEach(b => b.onclick = () => {
+  if (!st) return toast("Sin conexión");
+  pendSp = Math.max(SP_MIN, Math.min(SP_MAX, (pendSp != null ? pendSp : st.sp) + +b.dataset.d)); pendSpAt = Date.now(); render();
+  clearTimeout(spTimer); spTimer = setTimeout(() => { pendSpAt = Date.now(); send("SET " + pendSp); }, 600);
+});
+$("btnRun").onclick = () => {
+  if (!st) return;
+  if (st.st === "RUN" || st.st === "TUNE") { if (confirm("¿Apagar el ahumador?")) send("STOP"); }
+  else send("START");
+};
+$("banBtn").onclick = () => send("CLR");
+$("btnTune").onclick = () => {
+  if (!st) return toast("Sin conexión");
+  if (st.st === "TUNE") send("TUNE STOP");
+  else if (confirm("El autotune hace oscilar la temperatura alrededor de " + st.sp + " °C y tarda 1 a 2 horas. ¿Iniciar?")) send("TUNE");
+};
+$("btnBuz1").onclick = () => send("BUZ 1"); $("btnBuz0").onclick = () => send("BUZ 0");
+$("btnVref").onclick = () => { const v = parseFloat($("vref").value); if (v >= 3 && v <= 3.6) send("VREF " + v.toFixed(3)); else toast("Valor entre 3,0 y 3,6"); };
+$("btnCmd").onclick = () => { const v = $("cmd").value.trim(); if (v && send(v)) $("cmd").value = ""; };
+$("cmd").onkeydown = e => { if (e.key === "Enter") $("btnCmd").onclick(); };
+$("btnDemo").onclick = () => { if (link) link.close(); hist = []; link = new DemoLink(); setConn("on"); log("Modo demostración (tiempo acelerado 30x)"); toast("Demostración: datos simulados"); };
+$("btnClear").onclick = () => { hist = []; try { localStorage.removeItem("ahumador.hist"); } catch (e) {} draw(); };
+$("seg").onclick = e => { const m = e.target.dataset.m; if (m == null) return; rangeMin = +m; document.querySelectorAll("#seg button").forEach(b => b.classList.toggle("sel", b === e.target)); draw(); };
+
+let dlgI = 0;
+$("probes").onclick = e => {
+  const b = e.target.closest(".tg"); if (!b || !st) return;
+  dlgI = +b.dataset.i; $("dlgT").textContent = "Sonda " + (dlgI + 1) + " · " + NAMES[dlgI];
+  $("dlgR").value = st.tg[dlgI] > 0 ? st.tg[dlgI] : 74; $("dlgVal").textContent = $("dlgR").value + " °C"; $("dlg").showModal();
+};
+$("dlgR").oninput = () => $("dlgVal").textContent = $("dlgR").value + " °C";
+$("chips").onclick = e => { if (e.target.dataset.v) { $("dlgR").value = e.target.dataset.v; $("dlgR").oninput(); } };
+$("dlgOk").onclick = () => { send("TGT " + (dlgI + 1) + " " + $("dlgR").value); $("dlg").close(); };
+$("dlgOff").onclick = () => { send("TGT " + (dlgI + 1) + " 0"); $("dlg").close(); };
+$("dlg").onclick = e => { if (e.target === $("dlg")) $("dlg").close(); };
+
+window.addEventListener("resize", draw);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && link && !wake) setConn("on"); });
+try { const h = JSON.parse(localStorage.getItem("ahumador.hist") || "[]"); if (h.length && Date.now() - h[h.length - 1].x < 30 * 60000) hist = h; } catch (e) {}
+if (!navigator.bluetooth) $("hint").innerHTML = location.protocol === "https:" || location.hostname === "localhost"
+  ? "Este navegador no tiene Web Bluetooth. Ábrela en Chrome para Android."
+  : "Web Bluetooth solo funciona en páginas servidas por <b>https</b>. Puedes probar la pantalla con el modo demostración (en Avanzado).";
+render();
+</script>
+</body>
+</html>
