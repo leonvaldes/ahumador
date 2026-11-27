@@ -220,7 +220,7 @@ class BleLink {
     this.buf += s;
     let i;
     while ((i = this.buf.indexOf("\n")) >= 0) { const l = this.buf.slice(0, i).trim(); this.buf = this.buf.slice(i + 1); if (l) onLine(l); }
-    if (this.buf.length > 600) this.buf = "";
+    if (this.buf.length > 4000) this.buf = "";
   }
   send(text) {
     const b = new TextEncoder().encode(text + "\n");
@@ -232,7 +232,7 @@ class BleLink {
     setConn("wait"); log("Conexión perdida, reintentando…", "er");
     for (let n = 0; n < 8 && !this.closed; n++) {
       await new Promise(r => setTimeout(r, 1500 + n * 1000));
-      try { await this.attach(); setConn("on"); log("Reconectado"); this.send("GET"); return; } catch (e) {}
+      try { await this.attach(); setConn("on"); log("Reconectado"); this.send("GET"); setTimeout(histSync, 800); return; } catch (e) {}
     }
     if (!this.closed) { link = null; setConn("off"); toast("Se perdió la conexión"); }
   }
@@ -276,6 +276,7 @@ class DemoLink {
     else if (p[0] === "ACT") { s.pa[p[1] - 1] = +p[2]; r = "OK ACT " + p[1] + " " + p[2]; }
     else if (p[0] === "ACK") s.note = "";
     else if (["STALL", "CHIP", "PROG"].includes(p[0])) r = "OK " + p[0];
+    else if (p[0] === "HIST") r = p[1] === "CLR" ? "OK HIST CLR" : "H 1 0 0 0 ";
     setTimeout(() => onLine(r), 80);
   }
   close() { clearInterval(this.h); }
@@ -296,12 +297,14 @@ async function connect() {
   if (link) { link.close(); link = null; setConn("off"); return; }
   if (!navigator.bluetooth) { toast("Este navegador no tiene Web Bluetooth"); return; }
   const l = new BleLink();
-  try { setConn("wait"); await l.open(); link = l; setConn("on"); log("Conectado a " + (l.dev.name || "ahumador")); send("GET"); send("PID"); send("CFG"); }
+  try { setConn("wait"); await l.open(); link = l; setConn("on"); log("Conectado a " + (l.dev.name || "ahumador")); send("GET"); send("PID"); send("CFG"); setTimeout(histSync, 800); }
   catch (e) { setConn("off"); if (e.name !== "NotFoundError") { log("! " + e.message, "er"); toast("No se pudo conectar"); } }
 }
 
 // ---------------------------------------------------------------- datos entrantes
 function onLine(l) {
+  if (l.startsWith("H ")) { onHist(l); return; }
+  if (l === "OK HIST CLR") { try { localStorage.removeItem("ahumador.clrpend"); } catch (e) {} hs.next = 0; hsSave(); }
   if (l[0] === "{") {
     let d; try { d = JSON.parse(l); } catch (e) { return; }
     if ("progon" in d) { cfg = d; fillCfg(); return; }
@@ -329,12 +332,68 @@ function fillCfg() {
   });
 }
 
+const DAY = 24 * 3600000;
+// Ultimas 2 h con todo el detalle; lo anterior, un punto por minuto (como el historial del controlador).
+function compact(a, now) {
+  const out = []; let lk = -Infinity;
+  for (const p of a) if (p.x > now - DAY && (p.x > now - 2 * 3600000 || p.x - lk >= 55000)) { out.push(p); lk = p.x; }
+  return out;
+}
+function saveHist(now) { try { localStorage.setItem("ahumador.hist", JSON.stringify(compact(hist, now))); } catch (e) {} }
 function record(d) {
   const now = Date.now(), last = hist[hist.length - 1];
   if (last && now - last.x < 1500) return;
   hist.push({ x: now, t: d.t, sp: d.st === "ESPERA" ? null : (d.hold != null ? d.hold : d.sp), m: d.m.slice() });
-  if (hist.length > 6000) hist = hist.filter((_, i) => i % 2 === 0 || i > hist.length - 600);
-  if (!record.saved || now - record.saved > 30000) { record.saved = now; try { localStorage.setItem("ahumador.hist", JSON.stringify(hist.slice(-3000))); } catch (e) {} }
+  if (hist.length > 9000) hist = compact(hist, now);
+  if (!record.saved || now - record.saved > 30000) { record.saved = now; saveHist(now); }
+}
+
+// ---------------------------------------------------------------- historial del controlador
+// El controlador guarda un punto por minuto durante 24 h. Al conectarse, la app pide lo que le falta
+// (de a 15 puntos) y rellena los ratos en que el telefono no estuvo conectado.
+const HS_KEY = "ahumador.hsync";
+let hs = {}; try { hs = JSON.parse(localStorage.getItem(HS_KEY)) || {}; } catch (e) {}   // {boot, next}
+let hreq = null;
+function hsSave() { try { localStorage.setItem(HS_KEY, JSON.stringify(hs)); } catch (e) {} }
+function histSync() {
+  if (!link || link instanceof DemoLink || hreq) return;
+  let pend = false; try { pend = !!localStorage.getItem("ahumador.clrpend"); } catch (e) {}
+  if (pend) { link.send("HIST CLR"); hs.next = 0; }
+  histReq(hs.next || 0, 0);
+}
+function histReq(from, tries) {
+  if (hreq) clearTimeout(hreq.timer);
+  if (!link || tries > 3) { hreq = null; return; }
+  hreq = { from, tries, timer: setTimeout(() => histReq(from, tries + 1), 6000) };
+  link.send("HIST " + from);
+}
+function nearPoint(x) {                 // hay un punto a menos de 45 s? (hist esta ordenado)
+  let lo = 0, hi = hist.length - 1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (hist[m].x < x) lo = m + 1; else hi = m - 1; }
+  return [lo - 1, lo].some(i => i >= 0 && i < hist.length && Math.abs(hist[i].x - x) < 45000);
+}
+function onHist(l) {
+  const m = l.match(/^H (\d+) (\d+) (\d+) (\d+) ?(.*)$/);
+  if (!m || !hreq) return;
+  const boot = +m[1], s = +m[2], total = +m[3], age = +m[4], pts = m[5] ? m[5].split(";") : [];
+  if (hs.boot !== boot) {               // el controlador se reinicio: es otro historial
+    const asked = hreq.from; hs = { boot, next: 0 }; hsSave();
+    if (asked > 0) return histReq(0, 0);
+  }
+  if (pts.length !== Math.min(total, s + 15) - s) return histReq(hreq.from, hreq.tries + 1);   // llego incompleta
+  const now = Date.now(); let added = 0;
+  pts.forEach((p, j) => {
+    const v = p.split(",").map(x => x === "" ? null : +x / 10);
+    if (v.length !== 6 || v.some(x => x != null && isNaN(x))) return;
+    const x = now - age * 1000 - (total - 1 - (s + j)) * 60000;
+    if (x < now - DAY || nearPoint(x)) return;
+    hist.push({ x, t: v[0], sp: v[1], m: v.slice(2) }); added++;
+    if (hist.length > 1 && hist[hist.length - 2].x > x) hist.sort((a, b) => a.x - b.x);
+  });
+  hs.next = s + pts.length; hsSave();
+  if (added) { draw(); saveHist(now); }
+  if (pts.length && hs.next < total) histReq(hs.next, 0);
+  else { clearTimeout(hreq.timer); hreq = null; }
 }
 
 function alarms(d) {
@@ -428,7 +487,7 @@ function draw() {
   for (let m = stepX; m < span; m += stepX) g.fillText("−" + (m >= 60 ? (m / 60) + " h" : m + " min"), X(now - m * 60000), H - 5);
   const line = (get, color, w, dash) => {
     g.beginPath(); g.strokeStyle = color; g.lineWidth = w; g.setLineDash(dash || []); let pen = false, px = 0;
-    pts.forEach(p => { const v = get(p); if (v == null || (pen && p.x - px > 60000)) { pen = false; if (v == null) return; } g[pen ? "lineTo" : "moveTo"](X(p.x), Y(v)); pen = true; px = p.x; });
+    pts.forEach(p => { const v = get(p); if (v == null || (pen && p.x - px > 150000)) { pen = false; if (v == null) return; } g[pen ? "lineTo" : "moveTo"](X(p.x), Y(v)); pen = true; px = p.x; });
     g.stroke(); g.setLineDash([]);
   };
   line(p => p.sp, css("--mut"), 1, [4, 4]);
@@ -501,7 +560,17 @@ $("btnVref").onclick = () => { const v = parseFloat($("vref").value); if (v >= 3
 $("btnCmd").onclick = () => { const v = $("cmd").value.trim(); if (v && send(v)) $("cmd").value = ""; };
 $("cmd").onkeydown = e => { if (e.key === "Enter") $("btnCmd").onclick(); };
 $("btnDemo").onclick = () => { if (link) link.close(); hist = []; link = new DemoLink(); setConn("on"); link.send("CFG"); log("Modo demostración (tiempo acelerado 30x)"); toast("Demostración: datos simulados"); };
-$("btnClear").onclick = () => { hist = []; try { localStorage.removeItem("ahumador.hist"); } catch (e) {} draw(); };
+$("btnClear").onclick = () => {
+  const demo = link instanceof DemoLink;
+  if (!demo && !confirm("¿Borrar el historial del teléfono y del controlador?")) return;
+  hist = []; try { localStorage.removeItem("ahumador.hist"); } catch (e) {}
+  if (!demo) {
+    hs.next = 0; hsSave();
+    if (link) { link.send("HIST CLR"); toast("Historial borrado"); }
+    else { try { localStorage.setItem("ahumador.clrpend", "1"); } catch (e) {} toast("Borrado del teléfono; el del controlador se borra al conectar"); }
+  }
+  draw();
+};
 $("seg").onclick = e => { const m = e.target.dataset.m; if (m == null) return; rangeMin = +m; document.querySelectorAll("#seg button").forEach(b => b.classList.toggle("sel", b === e.target)); draw(); };
 
 let dlgI = 0, dlgA = 0;
@@ -524,8 +593,9 @@ $("dlgOff").onclick = () => { send("TGT " + (dlgI + 1) + " 0"); $("dlg").close()
 $("dlg").onclick = e => { if (e.target === $("dlg")) $("dlg").close(); };
 
 window.addEventListener("resize", draw);
-document.addEventListener("visibilitychange", () => { if (!document.hidden && link && !wake) setConn("on"); });
-try { const h = JSON.parse(localStorage.getItem("ahumador.hist") || "[]"); if (h.length && Date.now() - h[h.length - 1].x < 30 * 60000) hist = h; } catch (e) {}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && link) { if (!wake) setConn("on"); histSync(); } });
+try { const h = JSON.parse(localStorage.getItem("ahumador.hist") || "[]"); if (h.length && Date.now() - h[h.length - 1].x < DAY) hist = h; } catch (e) {}
+if (!hist.length) { hs.next = 0; hsSave(); }      // sin historial guardado: pedir todo lo que tenga el controlador
 if (!navigator.bluetooth) $("hint").innerHTML = location.protocol === "https:" || location.hostname === "localhost"
   ? "Este navegador no tiene Web Bluetooth. Ábrela en Chrome para Android."
   : "Web Bluetooth solo funciona en páginas servidas por <b>https</b>. Puedes probar la pantalla con el modo demostración (en Avanzado).";
